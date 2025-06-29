@@ -1,5 +1,5 @@
 python-multipart
-fastapi 
+fastapi[all] 
 uvicorn 
 google-generativeai 
 pillow
