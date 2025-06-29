@@ -5,9 +5,9 @@ from PIL import Image
 import io
 import google.generativeai as genai
 
-# === Gemini API Setup ===
-os.environ["GOOGLE_API_KEY"] = "AIzaSyDLF6v7tHsvP2Jej8OKn1MuJlLMVSip5PM"
-genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
+# ✅ Gemini API Setup from ENV
+api_key = os.getenv("GOOGLE_API_KEY")
+genai.configure(api_key=api_key)
 model = genai.GenerativeModel("gemini-1.5-flash")
 
 # === FastAPI App ===
