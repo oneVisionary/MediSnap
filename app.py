@@ -1,17 +1,27 @@
 import os
+import io
 from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
-import io
 import google.generativeai as genai
 
-# ✅ Gemini API Setup from ENV
+# === Gemini API Setup from ENV ===
 api_key = os.getenv("GOOGLE_API_KEY")
 genai.configure(api_key=api_key)
 model = genai.GenerativeModel("gemini-1.5-flash")
 
 # === FastAPI App ===
 app = FastAPI(title="MediSnap OCR API", description="AI-powered prescription reader")
+
+# === CORS Middleware ===
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Or replace with ["https://yourfrontend.com"]
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # === OCR Extraction Function ===
 def extract_with_gemini(image: Image.Image) -> str:
@@ -25,14 +35,9 @@ def extract_with_gemini(image: Image.Image) -> str:
 @app.post("/extract")
 async def extract_prescription(file: UploadFile = File(...)):
     try:
-        # ✅ Read uploaded image
         image_data = await file.read()
         image = Image.open(io.BytesIO(image_data))
-
-        # ✅ Extract using Gemini
         result_text = extract_with_gemini(image)
-
-        # ✅ Return structured response
         return JSONResponse(content={"status": "success", "extracted_data": result_text})
     
     except Exception as e:
