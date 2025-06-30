@@ -35,7 +35,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# === Gemini-based Extraction Function ===
+# === Step 1: Gemini-based Text Extraction ===
 def extract_data_from_image(image: Image.Image) -> Dict[str, Any]:
     prompt = """
     Read the handwritten prescription and extract:
@@ -67,7 +67,21 @@ def extract_data_from_image(image: Image.Image) -> Dict[str, Any]:
             return json.loads(match.group())
         return {"drugs": [], "diagnosis": ""}
 
-# === Google CSE Image Fetcher ===
+# === Step 2: Validate if Image is a Capsule or Drug ===
+def is_valid_capsule_image(image_url: str) -> bool:
+    try:
+        response = requests.get(image_url, timeout=10)
+        img = Image.open(io.BytesIO(response.content))
+
+        prompt = "Is this image a medicine capsule, tablet, or drug package? Answer with only 'yes' or 'no'."
+        verification = gemini_model.generate_content([prompt, img])
+        verdict = verification.text.strip().lower()
+        return "yes" in verdict
+    except Exception as e:
+        print(f"[Validation Error] {e}")
+        return False
+
+# === Step 3: Get Drug Image URL from Google CSE ===
 def get_drug_image_url(drug_name: str) -> str:
     search_url = "https://www.googleapis.com/customsearch/v1"
     params = {
@@ -79,12 +93,20 @@ def get_drug_image_url(drug_name: str) -> str:
     }
     try:
         response = requests.get(search_url, params=params, timeout=10)
-        return response.json()["items"][0]["link"]
+        image_url = response.json()["items"][0]["link"]
+
+        # Validate image content using Gemini
+        if is_valid_capsule_image(image_url):
+            return image_url
+        else:
+            print(f"⚠️ Rejected unrelated image for: {drug_name}")
+            return None
+
     except Exception as e:
-        print(f"Image not found for {drug_name}: {e}")
+        print(f"[Image Fetch Error for {drug_name}] {e}")
         return None
 
-# === FastAPI POST Endpoint ===
+# === Step 4: FastAPI Route ===
 @app.post("/extract")
 async def extract_prescription(file: UploadFile = File(...)):
     try:
@@ -92,10 +114,10 @@ async def extract_prescription(file: UploadFile = File(...)):
         image_data = await file.read()
         image = Image.open(io.BytesIO(image_data))
 
-        # Step 1: Extract info from Gemini
+        # Step 1: Extract using Gemini
         extracted_data = extract_data_from_image(image)
 
-        # Step 2: Append drug image URLs
+        # Step 2: Add image URLs if valid
         for drug in extracted_data.get("drugs", []):
             name = drug.get("name", "")
             drug["image_url"] = get_drug_image_url(name) or "Not found"
